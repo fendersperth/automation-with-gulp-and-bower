@@ -68,7 +68,6 @@ With the tools mentioned above, for it to all work together nicely, I would need
 The modules I commonly use to make these happen in gulp are as below:
 
 - gulp-load-plugins,
-- gulp-del,
 - gulp-sass,
 - main-bower-files,
 - gulp-order,
@@ -79,8 +78,10 @@ The modules I commonly use to make these happen in gulp are as below:
 Other modules that could be useful for your project:
 
 - gulp-cssmin,
+- gulp-del,
 - gulp-newer,
 - gulp-autoprefixer,
+- gulp-sourcemaps,
 - gulp-uncss, and
 - gulp-uglify.
 
@@ -92,7 +93,7 @@ Before going into the actual gulp configurations, I wanted to show my project’
 - a `_build` directory where all the compiled, minified assets would outputted to, and
 - a `vendors` which sits inside of `_build/js` for all the bower_components js library files. 
 
-file structure
+##### Project root
 
 ```
 _build/
@@ -103,11 +104,13 @@ _build/
 	index.html
 images/
 scripts/
+	main.js
 styles/
+	main.scss
 index.html
 ```
 
-index.html
+##### HTML file template
 
 ```
 <!doctype html>
@@ -127,43 +130,75 @@ index.html
 
 Before I start going through how I do the configuration for each task, firstly note that I use the gulp-load-plugins module so that I can avoid calling each gulp module separately. Instead I call `plugins.sass()` for example, and the gulp-load-plugins module imports the sass module to the gulp build.
 
-scss to css
+##### Build task
+
+The `build` task simply waits for the individual tasks above to be completed. 
+
+```
+gulp.task(‘build’, [’scripts’,’bower’,’styles’,’html’]);
+```
+
+##### Compile SCSS
+
+This is a basic SCSS compilation task. Extra modules could be added to minify the css output, generate source maps, prefix or lint etc.
+
 ```
 gulp.task(‘styles’, function() {
-    return gulp.src(‘./styles/app.scss’)
+    return gulp.src(‘./styles/main.scss’)
         .pipe(plugins.sass())
         .pipe(gulp.dest(‘./_build/css’));
 });
 ```
 
-minifying images
+##### Minifying images
+
+The image minifying task could be customised to achieve more compression if required for production builds. For development, speed is more important.
+
 ```
 gulp.task(‘images’, function() {
-    return gulp.src(‘./source/images/*.*’)
+    return gulp.src(‘./images/*.*’)
         .pipe(plugins.image())
         .pipe(gulp.dest(‘./_build/img’));
 });
 ```
-copying the scripts
+
+##### Copying the scripts
+
+The scripts in this task are just copied over. It is possible to add modules to concatenate scripts and minify.
+
 ```
 gulp.task(‘scripts’, function() {
 	return gulp.src(‘./scripts/**/*.js’)
                     .pipe(gulp.dest(‘./_build/app’))
 });
 ```
-copying the bower js libraries
+
+##### Copying the Bower JS libraries
+
+This task copies scripts from `bower_components`, based on your development. Some bower components are setup to include only the minified JS lib in production and non-minified for development.
+
 ```
 gulp.task(‘bower’, function() {
     return gulp.src(mainBowerFiles({‘env’:’development’}))
                     .pipe(gulp.dest(‘./_build/js/vendor’));
 });
 ```
-inject the required files into index.html
+
+##### Inject assets into index.html
+
+To make things easier for including bower required JS libraries, this task is used to inject any new scripts. The task is much more involved than those listed previously, on this is where the  gulp build process with bower really shines.
+
+The task starts by configuring the order in which scripts should load, bower libs first, then other scripts.
+
+All the compiles / copied JS and CSS files are then compiles into a list. The list is sorted into the order specified.
+
+This source list is then injected into the specified HTML files.
+
 ```
-gulp.task(‘html’, function() {
+gulp.task(‘html’, [‘bower’, ‘scripts’, ‘styles’], function() {
     var scriptLoadOrder =   [
                                 ‘**/vendor/**/*.js’,
-                                ‘**/script.js’,
+                                ‘**/*.js’,
                             ];
                             
     var sources = es.merge(
@@ -180,19 +215,25 @@ gulp.task(‘html’, function() {
     return stream;
 });
 ```
-The `build` task simply waits for the individual tasks above to be completed.
-```
-gulp.task(‘build’, [’scripts’,’bower’,’styles’,’html’]);
-```
-The `watch` reloads the browser for changes in scripts or styles.
+
+##### Watch for changes
+
+The `watch` task is used to reload the browser or inject updated assets on changes to scripts or styles files.
+
 ```
 gulp.task(‘watch’, [‘build’], function() {
     gulp.watch(“./scripts/**/*.js”, [‘scripts’, browserSync.reload]);
     gulp.watch(“./styles/**/*.scss”, [‘styles’, browserSync.reload]);
-    gulp.watch(“./index.html”, [‘html-inject’]);
+    gulp.watch(“./index.html”, [‘html’]);
 });
 ```
-web browser
+
+##### The web server
+
+This task is to setup a cool web server for the development. Browser-sync, if you haven’t used it before, will actually watch for interaction with the browser and will update the connected clients to match changes on the website. In short, if you have the url for your website on a desktop computer, smartphone, tablet etc, scrolling on the desktop computer will cause the website to also scroll on the other devices.
+
+The configuration for Browser-sync below is what I normally use.  By default, browser-sync will open a new window and notify you when the browser has updated assets.
+
 ```
 gulp.task(‘browser-sync’, function() {
     var config = {
@@ -207,6 +248,7 @@ gulp.task(‘browser-sync’, function() {
     browserSync(config);
 });
 ```
+
 ## The result
 
 Have a video to show this all in action
